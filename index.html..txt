@@ -1,0 +1,455 @@
+<!DOCTYPE html>
+<html lang="pt-PT">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>AR Manutenção de Torno</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+
+    <style>
+        /* Animação do Scanner Laser */
+        @keyframes scan {
+            0%, 100% { transform: translateY(-40vh); }
+            50% { transform: translateY(40vh); }
+        }
+        .animate-scan-laser {
+            animation: scan 2s ease-in-out infinite;
+        }
+    </style>
+</head>
+<body class="bg-black text-white font-sans select-none overflow-hidden h-screen w-full">
+
+    <div id="app" class="relative w-full h-full">
+
+        <!-- ================= ECRÃ DE MENU ================= -->
+        <div id="menu-view" class="relative w-full h-screen bg-slate-950 flex flex-col items-center justify-center overflow-hidden z-50">
+            <!-- Fundo técnico -->
+            <div class="absolute inset-0 bg-[linear-gradient(rgba(0,255,255,0.03)_1px,transparent_1px),linear-gradient(90deg,rgba(0,255,255,0.03)_1px,transparent_1px)] bg-[size:30px_30px] pointer-events-none"></div>
+            <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-cyan-900/20 rounded-full blur-3xl pointer-events-none"></div>
+            
+            <div class="relative z-10 flex flex-col items-center w-full max-w-md p-6">
+                <!-- Logo SENAI -->
+                <div class="mb-8 rounded-xl overflow-hidden shadow-[0_0_30px_rgba(255,0,0,0.3)]">
+                    <img 
+                        src="channels4_profile.jpg" 
+                        alt="SENAI" 
+                        class="h-28 w-28 md:h-32 md:w-32 object-cover block"
+                        onerror="this.onerror=null; this.style.display='none'; this.insertAdjacentHTML('afterend', '<div class=\'h-28 w-28 md:h-32 md:w-32 flex items-center justify-center font-bold text-white bg-[#FF0000] tracking-widest text-2xl\'>SENAI</div>');"
+                    />
+                </div>
+
+                <div class="text-center mb-10">
+                    <h1 class="text-3xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-blue-500 mb-2">
+                        Torno Mecânico AR
+                    </h1>
+                    <p class="text-slate-400 text-sm tracking-wide">
+                        Módulo de Manutenção Preventiva & Lubrificação
+                    </p>
+                </div>
+
+                <div class="w-full space-y-4">
+                    <button onclick="startAR()" class="w-full flex items-center justify-center gap-3 px-6 py-4 rounded-xl font-bold text-lg bg-cyan-600 text-white hover:bg-cyan-500 shadow-[0_0_20px_rgba(0,255,255,0.3)] transition-all active:scale-95 border border-cyan-400">
+                        <i data-lucide="camera" class="w-6 h-6"></i>
+                        INICIAR CÂMARA AR
+                    </button>
+
+                    <div class="bg-slate-900/80 border border-slate-700/50 rounded-xl p-4 flex items-start gap-3 backdrop-blur-sm">
+                        <i data-lucide="info" class="w-5 h-5 text-cyan-500 flex-shrink-0 mt-0.5"></i>
+                        <p class="text-xs text-slate-300 leading-relaxed text-left">
+                            Esta aplicação utiliza a câmara do seu dispositivo para sobrepor pontos de manutenção virtuais no torno mecânico real. <strong>Requer acesso através de um telemóvel.</strong>
+                        </p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="absolute bottom-6 text-slate-600 text-xs font-mono">
+                V 1.0.0 | SENAI SYSTEM
+            </div>
+        </div>
+
+        <!-- ================= ECRÃ DE AR (CÂMARA) ================= -->
+        <div id="ar-view" class="hidden relative w-full h-screen bg-black overflow-hidden">
+            
+            <!-- Video Background (Camera) -->
+            <video id="camera-video" autoplay playsinline muted class="absolute inset-0 w-full h-full object-cover opacity-80"></video>
+
+            <!-- Grid de Fundo Estilo HUD -->
+            <div class="absolute inset-0 bg-[linear-gradient(rgba(0,255,255,0.05)_1px,transparent_1px),linear-gradient(90deg,rgba(0,255,255,0.05)_1px,transparent_1px)] bg-[size:40px_40px] pointer-events-none"></div>
+
+            <!-- Erro de Câmara -->
+            <div id="error-overlay" class="hidden absolute inset-0 items-center justify-center bg-black/80 z-50 p-6">
+                <div class="bg-red-900/50 border border-red-500 text-red-100 p-6 rounded-lg max-w-md text-center backdrop-blur-md">
+                    <i data-lucide="shield-alert" class="w-12 h-12 mx-auto mb-4 text-red-400"></i>
+                    <h2 class="text-xl font-bold mb-2">Erro de Visão Computacional</h2>
+                    <p id="error-msg"></p>
+                    <button onclick="exitAR()" class="mt-4 px-4 py-2 bg-red-700 hover:bg-red-600 rounded text-white font-bold text-sm">VOLTAR AO MENU</button>
+                </div>
+            </div>
+
+            <!-- Interface HUD Superior -->
+            <div class="absolute top-0 left-0 w-full p-4 flex justify-between items-start pointer-events-none z-20">
+                <div class="flex flex-col">
+                    <div class="text-cyan-400 font-mono text-sm tracking-wider flex items-center gap-2 font-bold bg-black/40 px-3 py-1 rounded border border-cyan-800/50 backdrop-blur-sm">
+                        <i data-lucide="camera" class="w-4 h-4"></i>
+                        SISTEMA AR: <span id="hud-status-text">INICIANDO...</span>
+                    </div>
+                    <div id="scan-stats" class="mt-2 hidden gap-2">
+                        <!-- Será preenchido via JS -->
+                    </div>
+                </div>
+                <div class="flex flex-col items-end gap-2">
+                    <!-- Logo do SENAI -->
+                    <div class="rounded overflow-hidden shadow-[0_0_15px_rgba(255,0,0,0.3)] pointer-events-auto">
+                        <img 
+                            src="channels4_profile.jpg" 
+                            alt="SENAI" 
+                            class="h-10 w-10 md:h-12 md:w-12 object-cover block"
+                            onerror="this.onerror=null; this.style.display='none'; this.insertAdjacentHTML('afterend', '<div class=\'h-10 w-10 md:h-12 md:w-12 flex items-center justify-center font-bold text-white bg-[#FF0000] text-[10px] tracking-tighter\'>SENAI</div>');"
+                        />
+                    </div>
+                    <div class="text-cyan-400 font-mono text-xs text-right bg-black/40 px-3 py-1 rounded border border-cyan-800/50 backdrop-blur-sm">
+                        <div>ALVO: TORNO MECÂNICO</div>
+                        <div>MÓDULO: MANUTENÇÃO</div>
+                    </div>
+                    
+                    <!-- Botão Sair -->
+                    <button onclick="exitAR()" class="mt-2 bg-red-900/60 border border-red-500/50 text-red-200 px-3 py-1.5 rounded flex items-center gap-2 text-xs font-bold hover:bg-red-800/80 transition-colors pointer-events-auto backdrop-blur-sm">
+                        <i data-lucide="log-out" class="w-3 h-3"></i> SAIR DO AR
+                    </button>
+                </div>
+            </div>
+
+            <!-- Mira Central (Crosshair) -->
+            <div id="crosshair" class="hidden absolute inset-0 items-center justify-center pointer-events-none z-10">
+                <div class="relative w-64 h-64 border-2 border-cyan-500/30 rounded-3xl">
+                    <div class="absolute top-0 left-0 w-8 h-8 border-t-4 border-l-4 border-cyan-400 rounded-tl-3xl"></div>
+                    <div class="absolute top-0 right-0 w-8 h-8 border-t-4 border-r-4 border-cyan-400 rounded-tr-3xl"></div>
+                    <div class="absolute bottom-0 left-0 w-8 h-8 border-b-4 border-l-4 border-cyan-400 rounded-bl-3xl"></div>
+                    <div class="absolute bottom-0 right-0 w-8 h-8 border-b-4 border-r-4 border-cyan-400 rounded-br-3xl"></div>
+                    <div class="absolute inset-0 flex items-center justify-center">
+                        <div class="w-2 h-2 bg-cyan-400 rounded-full animate-pulse"></div>
+                    </div>
+                    <div class="absolute -bottom-10 left-0 w-full text-center text-cyan-400 font-mono text-sm tracking-widest bg-black/30 backdrop-blur-sm py-1 rounded">
+                        ALINHE A MÁQUINA
+                    </div>
+                </div>
+            </div>
+
+            <!-- Animação de Escaneamento (Laser) -->
+            <div id="laser" class="hidden absolute inset-0 z-10 pointer-events-none items-center justify-center">
+                <div class="w-full h-1 bg-cyan-400 shadow-[0_0_20px_5px_rgba(34,211,238,0.6)] animate-scan-laser"></div>
+                <div class="absolute text-cyan-400 font-mono text-xl font-bold tracking-widest bg-black/50 px-6 py-2 rounded-full border border-cyan-500 backdrop-blur-md animate-pulse">
+                    ANALISANDO ESTRUTURA...
+                </div>
+            </div>
+
+            <!-- Container de Pontos Identificados -->
+            <div id="points-container" class="absolute inset-0 z-20 pointer-events-none"></div>
+
+            <!-- Modal de Detalhes do Ponto -->
+            <div id="modal-container" class="hidden"></div>
+
+            <!-- Botões de Ação Fixos -->
+            <div id="btn-container" class="absolute bottom-8 left-0 w-full flex justify-center z-20 pointer-events-auto">
+                <!-- Injetado via JS -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Script de Lógica -->
+    <script>
+        // Dados dos pontos de manutenção do torno
+        const maintenancePoints = [
+            { id: 1, type: 'lubrificacao', title: 'Barramento (Guias)', x: 35, y: 55, desc: 'Aplicar óleo lubrificante específico para guias (ex: Óleo ISO VG 68). Evita desgaste por atrito e mantém a precisão de usinagem.', freq: 'Diária', status: 'Atenção' },
+            { id: 2, type: 'preventiva', title: 'Placa de Fixação', x: 65, y: 35, desc: 'Verificar o aperto das castanhas, realizar a limpeza de cavacos acumulados na espiral e lubrificar internamente com graxa.', freq: 'Semanal', status: 'Regular' },
+            { id: 3, type: 'lubrificacao', title: 'Caixa Norton', x: 20, y: 75, desc: 'Inspecionar o visor de nível de óleo. O nível deve estar no meio do visor. Completar com óleo adequado se necessário.', freq: 'Semanal', status: 'Bom' },
+            { id: 4, type: 'preventiva', title: 'Correias do Motor', x: 80, y: 65, desc: 'Inspecionar o compartimento traseiro. Checar a tensão das correias em V e procurar por sinais de ressecamento ou rachaduras.', freq: 'Mensal', status: 'Regular' },
+            { id: 5, type: 'lubrificacao', title: 'Fuso e Vara', x: 55, y: 60, desc: 'Limpar excesso de sujeira e aplicar uma camada leve de óleo com pincel para proteger a rosca e garantir movimento suave do carro.', freq: 'Semanal', status: 'Atenção' },
+        ];
+
+        // Estado da Aplicação
+        let state = {
+            isMenu: true,
+            cameraActive: false,
+            cameraError: '',
+            scanning: false,
+            scanned: false,
+            activePoint: null
+        };
+
+        let videoStream = null;
+
+        // Inicializa ícones do menu
+        lucide.createIcons();
+
+        // --- FUNÇÕES DA CÂMARA ---
+        async function startAR() {
+            state.isMenu = false;
+            updateUI();
+
+            const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+            
+            if (!isMobile) {
+                state.cameraError = 'Acesso bloqueado. Esta aplicação de Realidade Aumentada é exclusiva para dispositivos móveis. Por favor, aceda através do seu telemóvel para utilizar a câmara traseira.';
+                updateUI();
+                return;
+            }
+
+            try {
+                videoStream = await navigator.mediaDevices.getUserMedia({ 
+                    video: { facingMode: 'environment' } 
+                });
+                const video = document.getElementById('camera-video');
+                video.srcObject = videoStream;
+                state.cameraActive = true;
+                updateUI();
+            } catch (err) {
+                console.error("Erro ao aceder à câmara:", err);
+                state.cameraError = 'Permissão de câmara negada ou câmara não encontrada. Verifique as permissões do seu navegador.';
+                updateUI();
+            }
+        }
+
+        function stopCamera() {
+            if (videoStream) {
+                videoStream.getTracks().forEach(track => track.stop());
+                videoStream = null;
+            }
+            const video = document.getElementById('camera-video');
+            if (video) video.srcObject = null;
+        }
+
+        function exitAR() {
+            stopCamera();
+            state.isMenu = true;
+            state.cameraActive = false;
+            state.cameraError = '';
+            state.scanning = false;
+            state.scanned = false;
+            state.activePoint = null;
+            updateUI();
+        }
+
+        // --- FUNÇÕES DE AR ---
+        function handleScan() {
+            if (!state.cameraActive || state.scanning) return;
+            
+            state.scanning = true;
+            state.scanned = false;
+            state.activePoint = null;
+            updateUI();
+
+            setTimeout(() => {
+                state.scanning = false;
+                state.scanned = true;
+                updateUI();
+            }, 3000);
+        }
+
+        function resetScan() {
+            state.scanned = false;
+            updateUI();
+        }
+
+        function openModal(id) {
+            state.activePoint = maintenancePoints.find(p => p.id === id);
+            updateUI();
+        }
+
+        function closeModal() {
+            state.activePoint = null;
+            updateUI();
+        }
+
+        // --- ATUALIZAÇÃO DA INTERFACE (Render) ---
+        function updateUI() {
+            // Alternar Vistas Principais
+            document.getElementById('menu-view').style.display = state.isMenu ? 'flex' : 'none';
+            document.getElementById('ar-view').style.display = state.isMenu ? 'none' : 'block';
+
+            if (state.isMenu) return; // Não atualizar AR se estiver no menu
+
+            // Erro de Câmara
+            const errorOverlay = document.getElementById('error-overlay');
+            if (state.cameraError) {
+                errorOverlay.classList.remove('hidden');
+                errorOverlay.classList.add('flex');
+                document.getElementById('error-msg').innerText = state.cameraError;
+            } else {
+                errorOverlay.classList.add('hidden');
+                errorOverlay.classList.remove('flex');
+            }
+
+            // HUD Status
+            document.getElementById('hud-status-text').innerText = state.cameraActive ? 'ONLINE' : 'INICIANDO...';
+
+            // Elementos de mira e laser
+            const crosshair = document.getElementById('crosshair');
+            const laser = document.getElementById('laser');
+            
+            crosshair.classList.toggle('hidden', state.scanned || state.scanning || !state.cameraActive);
+            crosshair.classList.toggle('flex', !state.scanned && !state.scanning && state.cameraActive);
+            
+            laser.classList.toggle('hidden', !state.scanning);
+            laser.classList.toggle('flex', state.scanning);
+
+            // Estatísticas Scanned HUD
+            const statsContainer = document.getElementById('scan-stats');
+            if (state.scanned) {
+                const lubCount = maintenancePoints.filter(p => p.type === 'lubrificacao').length;
+                const prevCount = maintenancePoints.filter(p => p.type === 'preventiva').length;
+                statsContainer.innerHTML = `
+                    <span class="bg-blue-900/60 border border-blue-500 text-blue-200 text-xs px-2 py-1 rounded flex items-center gap-1 backdrop-blur-sm">
+                        <i data-lucide="droplet" class="w-3 h-3"></i> Lubrificação (${lubCount})
+                    </span>
+                    <span class="bg-orange-900/60 border border-orange-500 text-orange-200 text-xs px-2 py-1 rounded flex items-center gap-1 backdrop-blur-sm">
+                        <i data-lucide="wrench" class="w-3 h-3"></i> Preventiva (${prevCount})
+                    </span>
+                `;
+                statsContainer.classList.remove('hidden');
+                statsContainer.classList.add('flex');
+            } else {
+                statsContainer.classList.add('hidden');
+                statsContainer.classList.remove('flex');
+                statsContainer.innerHTML = '';
+            }
+
+            // Botões Fixos
+            const btnContainer = document.getElementById('btn-container');
+            if (!state.scanned) {
+                if (!state.cameraActive || state.scanning) {
+                    btnContainer.innerHTML = `
+                        <button disabled class="flex items-center gap-2 px-8 py-4 rounded-full font-bold text-lg shadow-[0_0_20px_rgba(0,255,255,0.4)] transition-all bg-gray-700 text-gray-400 cursor-not-allowed border border-gray-600">
+                            <i data-lucide="scan" class="w-6 h-6 ${state.scanning ? 'animate-spin' : ''}"></i>
+                            ${state.scanning ? 'ANALISANDO...' : 'ESCANEAR TORNO'}
+                        </button>`;
+                } else {
+                    btnContainer.innerHTML = `
+                        <button onclick="handleScan()" class="flex items-center gap-2 px-8 py-4 rounded-full font-bold text-lg shadow-[0_0_20px_rgba(0,255,255,0.4)] transition-all bg-cyan-600 text-white hover:bg-cyan-500 hover:scale-105 border border-cyan-400 active:scale-95">
+                            <i data-lucide="scan" class="w-6 h-6"></i> ESCANEAR TORNO
+                        </button>`;
+                }
+            } else {
+                btnContainer.innerHTML = `
+                    <button onclick="resetScan()" class="flex items-center gap-2 px-6 py-3 rounded-full font-bold text-white bg-slate-800 hover:bg-slate-700 border border-slate-600 shadow-lg transition-all active:scale-95">
+                        <i data-lucide="camera" class="w-5 h-5"></i> Novo Escaneamento
+                    </button>`;
+            }
+
+            // Atualizar Pontos na Tela
+            renderPoints();
+            
+            // Atualizar Modal
+            renderModal();
+
+            // Renderizar Ícones (Requerido após injeção de HTML dinâmico)
+            lucide.createIcons();
+        }
+
+        function renderPoints() {
+            const container = document.getElementById('points-container');
+            if (!state.scanned || state.scanning) {
+                container.innerHTML = '';
+                return;
+            }
+
+            let html = '';
+            maintenancePoints.forEach(point => {
+                const isLub = point.type === 'lubrificacao';
+                const colorClass = isLub ? 'bg-blue-500 border-blue-300' : 'bg-orange-500 border-orange-300';
+                const glowClass = isLub ? 'shadow-[0_0_15px_rgba(59,130,246,0.8)]' : 'shadow-[0_0_15px_rgba(249,115,22,0.8)]';
+                const iconName = isLub ? 'droplet' : 'wrench';
+                const borderColor = isLub ? 'border-blue-400' : 'border-orange-400';
+
+                html += `
+                <div class="absolute transform -translate-x-1/2 -translate-y-1/2 cursor-pointer group pointer-events-auto"
+                     style="top: ${point.y}%; left: ${point.x}%"
+                     onclick="openModal(${point.id})">
+                    <div class="absolute top-1/2 left-1/2 w-12 h-12 -mt-6 -ml-6 border-2 rounded-full animate-ping opacity-75 ${borderColor}"></div>
+                    <div class="relative flex items-center justify-center w-12 h-12 rounded-full border-2 text-white transition-transform transform group-hover:scale-110 ${colorClass} ${glowClass}">
+                        <i data-lucide="${iconName}" class="w-6 h-6"></i>
+                    </div>
+                    <div class="absolute top-14 left-1/2 transform -translate-x-1/2 bg-black/80 border border-gray-600 text-white text-xs px-2 py-1 rounded whitespace-nowrap backdrop-blur-md opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
+                        ${point.title}
+                    </div>
+                </div>
+                `;
+            });
+            container.innerHTML = html;
+        }
+
+        function renderModal() {
+            const container = document.getElementById('modal-container');
+            if (!state.activePoint) {
+                container.innerHTML = '';
+                container.classList.add('hidden');
+                return;
+            }
+
+            const p = state.activePoint;
+            const isLub = p.type === 'lubrificacao';
+            const headerBg = isLub ? 'bg-blue-900/50 border-blue-700' : 'bg-orange-900/50 border-orange-700';
+            const iconBg = isLub ? 'bg-blue-500' : 'bg-orange-500';
+            const iconName = isLub ? 'droplet' : 'wrench';
+            const typeLabel = isLub ? 'Ponto de Lubrificação' : 'Manutenção Preventiva';
+            const btnBg = isLub ? 'bg-blue-600 hover:bg-blue-500 shadow-blue-900/50' : 'bg-orange-600 hover:bg-orange-500 shadow-orange-900/50';
+
+            let statusIcon = '';
+            if(p.status === 'Bom') statusIcon = '<i data-lucide="check-circle-2" class="w-4 h-4 text-green-400"></i>';
+            if(p.status === 'Atenção') statusIcon = '<i data-lucide="alert-triangle" class="w-4 h-4 text-yellow-400"></i>';
+            if(p.status === 'Regular') statusIcon = '<i data-lucide="info" class="w-4 h-4 text-blue-400"></i>';
+
+            container.innerHTML = `
+            <div class="absolute inset-0 bg-black/40 z-30 flex items-center justify-center p-4 backdrop-blur-sm pointer-events-auto" onclick="closeModal()">
+                <div class="bg-slate-900/90 border border-slate-700 rounded-xl max-w-md w-full shadow-2xl overflow-hidden transform transition-all" onclick="event.stopPropagation()">
+                    <div class="p-4 flex items-center justify-between border-b ${headerBg}">
+                        <div class="flex items-center gap-3">
+                            <div class="p-2 rounded-lg ${iconBg}">
+                                <i data-lucide="${iconName}" class="w-6 h-6 text-white"></i>
+                            </div>
+                            <div>
+                                <h3 class="text-white font-bold text-lg leading-tight">${p.title}</h3>
+                                <span class="text-gray-300 text-xs font-mono uppercase tracking-wider">${typeLabel}</span>
+                            </div>
+                        </div>
+                        <button onclick="closeModal()" class="text-gray-400 hover:text-white bg-slate-800 rounded-full p-1">
+                            <i data-lucide="x" class="w-5 h-5"></i>
+                        </button>
+                    </div>
+                    <div class="p-5 space-y-4">
+                        <div class="bg-slate-800/50 rounded-lg p-3 border border-slate-700 flex items-start gap-3">
+                            <i data-lucide="info" class="w-5 h-5 text-cyan-400 flex-shrink-0 mt-0.5"></i>
+                            <p class="text-gray-200 text-sm leading-relaxed">${p.desc}</p>
+                        </div>
+                        <div class="grid grid-cols-2 gap-3">
+                            <div class="bg-slate-800/50 rounded-lg p-3 border border-slate-700">
+                                <span class="text-gray-400 text-xs uppercase block mb-1">Frequência</span>
+                                <div class="text-white font-semibold flex items-center gap-2">
+                                    <i data-lucide="check-circle-2" class="w-4 h-4 text-green-400"></i> ${p.freq}
+                                </div>
+                            </div>
+                            <div class="bg-slate-800/50 rounded-lg p-3 border border-slate-700">
+                                <span class="text-gray-400 text-xs uppercase block mb-1">Status Atual</span>
+                                <div class="text-white font-semibold flex items-center gap-2">
+                                    ${statusIcon} ${p.status}
+                                </div>
+                            </div>
+                        </div>
+                        <button class="w-full py-3 rounded-lg font-bold text-white shadow-lg transition-all ${btnBg}">
+                            Registrar Tarefa Concluída
+                        </button>
+                    </div>
+                </div>
+            </div>
+            `;
+            container.classList.remove('hidden');
+        }
+
+    </script>
+</body>
+</html>
